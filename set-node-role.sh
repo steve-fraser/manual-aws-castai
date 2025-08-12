@@ -1,8 +1,31 @@
 #!/bin/bash
-SUBNET="subnet-0a41e364fb75c31ac"
-SG_GROUP="sg-0acaed08afd56140d"
-INSTANCE_PROFILE=arn:aws:iam::445567108000:instance-profile/eks-72cc4fab-c18a-1e10-c06f-f81648452d27
-CLUSTER_ID="3b909111-a0e7-4b20-a01f-977d37c496be"
+
+
+# Validate required environment variables
+if [[ -z "$CASTAI_API_TOKEN" ]]; then
+    echo "Error: CASTAI_API_TOKEN environment variable is required" >&2
+    exit 1
+fi
+
+# Optional: Validate other required variables
+required_vars=("SUBNET" "SG_GROUP" "INSTANCE_PROFILE" "CLUSTER_ID")
+for var in "${required_vars[@]}"; do
+    if [[ -z "${!var}" ]]; then
+        echo "Error: $var is required but not set" >&2
+        exit 1
+    fi
+done
+
+# Display configuration (optional - remove if you don't want to show values)
+echo "Configuration:"
+echo "  SUBNET: $SUBNET"
+echo "  SG_GROUP: $SG_GROUP"
+echo "  INSTANCE_PROFILE: $INSTANCE_PROFILE"
+echo "  CLUSTER_ID: $CLUSTER_ID"
+echo ""
+
+# Create node configuration and capture ID
+echo "Creating node configuration..."
 NODE_CONFIG_ID=$(curl --silent --request POST \
      --url "https://api.cast.ai/v1/kubernetes/clusters/$CLUSTER_ID/node-configurations" \
      --header "X-API-Key: $CASTAI_API_TOKEN" \
@@ -29,8 +52,26 @@ NODE_CONFIG_ID=$(curl --silent --request POST \
 EOF
 )
 
+# Check if node configuration was created successfully
+if [[ -z "$NODE_CONFIG_ID" || "$NODE_CONFIG_ID" == "null" ]]; then
+    echo "Error: Failed to create node configuration" >&2
+    exit 1
+fi
+
 echo "Node Configuration ID: $NODE_CONFIG_ID"
-curl --request POST \
-     --url https://api.cast.ai/v1/kubernetes/clusters/$CLUSTER_ID/node-configurations/$NODE_CONFIG_ID/default \
+
+# Set as default configuration
+echo "Setting as default configuration..."
+response=$(curl --silent --request POST \
+     --url "https://api.cast.ai/v1/kubernetes/clusters/$CLUSTER_ID/node-configurations/$NODE_CONFIG_ID/default" \
      --header "X-API-Key: $CASTAI_API_TOKEN" \
-     --header 'accept: application/json'
+     --header 'accept: application/json')
+
+# Check if setting as default was successful
+if [[ $? -eq 0 ]]; then
+    echo "Successfully set node configuration as default"
+    echo "Response: $response"
+else
+    echo "Error: Failed to set node configuration as default" >&2
+    exit 1
+fi
